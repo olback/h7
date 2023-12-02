@@ -57,7 +57,7 @@ where
         let (front, back) = self.get_buffers();
 
         // after swap, copy the new front to the new back
-        back.copy_from_slice(&**front);
+        // back.copy_from_slice(&**front);
 
         (front, back)
     }

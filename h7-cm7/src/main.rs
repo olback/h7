@@ -1,6 +1,6 @@
 #![no_main]
 #![no_std]
-#![feature(alloc_error_handler, const_for, const_mut_refs, array_chunks, generic_const_exprs)]
+#![feature(alloc_error_handler, const_for, const_mut_refs, array_chunks, generic_const_exprs, generic_arg_infer)]
 
 // use embedded_display_controller::DisplayController;
 
@@ -14,7 +14,7 @@ use {
     embedded_display_controller::{DisplayConfiguration, DisplayController, DisplayControllerLayer, PixelFormat},
     fugit::RateExtU32,
     led::Led,
-    stm32h7xx_hal::{self as hal, adc, gpio::Speed, pac, prelude::*, rcc, rtc},
+    stm32h7xx_hal::{self as hal, adc, dma::mdma::StreamsTuple, gpio::Speed, pac, prelude::*, rcc, rtc},
     time::TimeSource,
 };
 
@@ -51,7 +51,7 @@ unsafe fn main() -> ! {
     cp.DCB.enable_trace();
     cp.DWT.enable_cycle_counter();
     cp.SCB.enable_icache();
-    cp.SCB.enable_dcache(&mut cp.CPUID);
+    // cp.SCB.enable_dcache(&mut cp.CPUID);
 
     // Ah, yes
     // Copy the PWR CR3 power register value from a working Arduino sketch and write the value
@@ -73,6 +73,7 @@ unsafe fn main() -> ! {
         let mut ccdr = dp
             .RCC
             .constrain()
+            // .use_hse()
             .bypass_hse()
             .sys_ck(480.MHz())
             .hclk(240.MHz())
@@ -81,11 +82,11 @@ unsafe fn main() -> ! {
             .pll2_strategy(rcc::PllConfigStrategy::Iterative)
             .pll2_p_ck(500.MHz() / 2)
             .pll2_q_ck(400.MHz() / 2)
-            .pll2_r_ck(300.MHz() / 2)
+            .pll2_r_ck(400.MHz() / 2)
             .pll3_strategy(rcc::PllConfigStrategy::Iterative)
             .pll3_p_ck(800.MHz() / 2)
             .pll3_q_ck(800.MHz() / 2)
-            .pll3_r_ck(800.MHz() / 83)
+            .pll3_r_ck(display::PIXEL_CLOCK)
             .freeze(pwrcfg, &dp.SYSCFG);
 
         // USB Clock
@@ -159,6 +160,9 @@ unsafe fn main() -> ! {
             terminal::UART_TERMINAL_RX.borrow(cs).replace(Some(terminal_rx));
         });
     };
+
+    log::info!("pll3_r_ck: {:?}", ccdr.clocks.pll3_r_ck());
+    let _pll3_r = ccdr.clocks.pll3_r_ck().expect("pll3 must run!");
 
     // gpiok.pk3.into_push_pull_output().set_high().unwrap(); // cable
     // gpiok.pk4.into_push_pull_output().set_low().unwrap(); // alt
@@ -323,17 +327,17 @@ unsafe fn main() -> ! {
         let display_config = DisplayConfiguration {
             active_width: display::SCREEN_WIDTH as u16,
             active_height: display::SCREEN_HEIGHT as u16,
-            h_back_porch: 120,
-            h_front_porch: 32,
-            v_back_porch: 10,
-            v_front_porch: 45,
-            h_sync: 20,
-            v_sync: 12,
+            h_back_porch: display::H_BACK_PORCH,
+            h_front_porch: display::H_FRONT_PORCH,
+            v_back_porch: display::V_BACK_PORCH,
+            v_front_porch: display::V_FRONT_PORCH,
+            h_sync: display::H_SYNC_LEN,
+            v_sync: display::V_SYNC_LEN,
 
             // horizontal synchronization: `false`: active low, `true`: active high
-            h_sync_pol: false,
+            h_sync_pol: display::H_SYNC_POL,
             // vertical synchronization: `false`: active low, `true`: active high
-            v_sync_pol: false,
+            v_sync_pol: display::V_SYNC_POL,
             // data enable: `false`: active low, `true`: active high
             not_data_enable_pol: true,
             // pixel_clock: `false`: active low, `true`: active high
@@ -341,6 +345,7 @@ unsafe fn main() -> ! {
         };
         ltdc.init(display_config);
 
+        // Probalby a bunch of UB here, but who cares?
         let fb0: &'static mut _ = &mut *(framebuffer_start_addr as *mut _);
         let fb1: &'static mut _ = &mut *((framebuffer_start_addr + display::FRAME_BUFFER_SIZE) as *mut _);
         let display = h7_display::H7Display::new(fb0, fb1);
@@ -355,7 +360,12 @@ unsafe fn main() -> ! {
         timer2.listen(hal::timer::Event::TimeOut);
         cortex_m::peripheral::NVIC::unmask(pac::Interrupt::TIM2);
 
-        let _dsihost = dsi::Dsi::new(dsi::DsiLanes::Two, &display_config, dp.DSIHOST, ccdr.peripheral.DSI, &ccdr.clocks);
+        // TODO: DMA2D, DMA framebuffer copy
+        // let mut dma_stream = StreamsTuple::new(dp.MDMA, ccdr.peripheral.MDMA);
+        // dma_stream.
+
+        // DSI?
+        // let _dsihost = dsi::Dsi::new(dsi::DsiLanes::Two, &display_config, dp.DSIHOST, ccdr.peripheral.DSI, &ccdr.clocks);
     }
 
     let mut menu = terminal::menu::Menu::new(terminal::TerminalWriter, terminal::MENU);
