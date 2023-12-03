@@ -27,10 +27,8 @@ impl core::fmt::Write for TerminalWriter {
 // pub static TERMINAL_INPUT_FIFO: Mutex<RefCell<Queue<u8, 64>>> =
 //     Mutex::new(RefCell::new(Queue::new()));
 pub static TERMINAL_INPUT_FIFO: Q64<u8> = Q64::new();
-pub static UART_TERMINAL_RX: Mutex<RefCell<Option<serial::Rx<pac::USART1>>>> =
-    Mutex::new(RefCell::new(None));
-pub static UART_TERMINAL_TX: Mutex<RefCell<Option<serial::Tx<pac::USART1>>>> =
-    Mutex::new(RefCell::new(None));
+pub static UART_TERMINAL_RX: Mutex<RefCell<Option<serial::Rx<pac::USART1>>>> = Mutex::new(RefCell::new(None));
+pub static UART_TERMINAL_TX: Mutex<RefCell<Option<serial::Tx<pac::USART1>>>> = Mutex::new(RefCell::new(None));
 pub const UART_TERMINAL_BAUD: u32 = 115_200;
 
 pub const MENU: &[MenuItem<TerminalWriter>] = &[
@@ -49,11 +47,7 @@ pub const MENU: &[MenuItem<TerminalWriter>] = &[
     },
     MenuItem::Group {
         title: "Program",
-        commands: &[
-            commands::program::PLOAD,
-            commands::program::PRUN,
-            commands::program::UPLOAD,
-        ],
+        commands: &[commands::program::PLOAD, commands::program::PRUN, commands::program::UPLOAD],
     },
     MenuItem::Group {
         title: "System",
@@ -74,11 +68,7 @@ pub const MENU: &[MenuItem<TerminalWriter>] = &[
     },
     MenuItem::Group {
         title: "Date / Time",
-        commands: &[
-            commands::time::CAL,
-            commands::time::DATE,
-            commands::time::TIME,
-        ],
+        commands: &[commands::time::CAL, commands::time::DATE, commands::time::TIME],
     },
     MenuItem::Group {
         title: "Other",

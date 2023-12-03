@@ -9,8 +9,9 @@ type Pixel = embedded_graphics::pixelcolor::Rgb565;
 
 pub const SCREEN_WIDTH: usize = 1024;
 pub const SCREEN_HEIGHT: usize = 768;
-// pub const PIXEL_CLOCK: fugit::Hertz<u32> = 57800u32.kHz();
 pub const PIXEL_CLOCK: fugit::HertzU32 = fugit::Rate::<u32, _, _>::kHz(57800u32);
+// pub const PIXEL_CLOCK: fugit::HertzU32 = fugit::Rate::<u32, _, _>::kHz(51270u32);
+// pub const PIXEL_CLOCK: fugit::HertzU32 = fugit::Rate::<u32, _, _>::MHz(65u32);
 pub const H_BACK_PORCH: u16 = 80;
 pub const H_FRONT_PORCH: u16 = 24;
 pub const H_SYNC_LEN: u16 = 68;
@@ -46,10 +47,10 @@ impl Gpu {
             cortex_m::asm::dmb();
             cortex_m::asm::dsb();
         }
+    }
 
-        // while self.layer.is_swap_pending() {
-        //     cortex_m::asm::nop();
-        // }
+    pub fn display(&mut self) -> &mut H7Display<'static, Pixel, SCREEN_HEIGHT, SCREEN_HEIGHT> {
+        &mut self.display
     }
 }
 

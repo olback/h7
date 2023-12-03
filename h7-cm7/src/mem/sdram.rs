@@ -39,15 +39,9 @@ pub fn configure(mpu: &cortex_m::peripheral::MPU, scb: &cortex_m::peripheral::SC
         mpu.ctrl.write(0);
         mpu.rnr.write(REGION_NUMBER0);
         mpu.rbar.write(REGION_BASE_ADDRESS);
-        mpu.rasr.write(
-            (REGION_FULL_ACCESS << 24)
-                | (REGION_CACHEABLE << 17)
-                | (REGION_WRITE_BACK << 16)
-                | ((SDRAM_SIZE.ilog2() - 1) << 1)
-                | REGION_ENABLE,
-        );
-        mpu.ctrl
-            .modify(|r| r | MPU_DEFAULT_MMAP_FOR_PRIVILEGED | MPU_ENABLE);
+        mpu.rasr
+            .write((REGION_FULL_ACCESS << 24) | (REGION_CACHEABLE << 17) | (REGION_WRITE_BACK << 16) | ((SDRAM_SIZE.ilog2() - 1) << 1) | REGION_ENABLE);
+        mpu.ctrl.modify(|r| r | MPU_DEFAULT_MMAP_FOR_PRIVILEGED | MPU_ENABLE);
 
         scb.shcsr.modify(|r| r | MEMFAULTENA);
     }

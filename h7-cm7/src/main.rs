@@ -4,6 +4,9 @@
 
 // use embedded_display_controller::DisplayController;
 
+use embedded_graphics::prelude::{DrawTarget, RgbColor};
+use hal::dsi::{ColorCoding, DsiChannel, DsiCmdModeTransmissionKind, DsiConfig, DsiHost, DsiInterrupts, DsiMode, DsiPhyTimers, DsiPllConfig, LaneCount};
+
 extern crate alloc;
 
 use {
@@ -34,6 +37,8 @@ mod terminal;
 mod time;
 mod utils;
 
+pub const HSE_CLK: fugit::HertzU32 = fugit::Rate::<u32, _, _>::MHz(27u32);
+
 #[cortex_m_rt::entry]
 unsafe fn main() -> ! {
     logger::init();
@@ -51,7 +56,7 @@ unsafe fn main() -> ! {
     cp.DCB.enable_trace();
     cp.DWT.enable_cycle_counter();
     cp.SCB.enable_icache();
-    // cp.SCB.enable_dcache(&mut cp.CPUID);
+    cp.SCB.enable_dcache(&mut cp.CPUID);
 
     // Ah, yes
     // Copy the PWR CR3 power register value from a working Arduino sketch and write the value
@@ -68,12 +73,18 @@ unsafe fn main() -> ! {
     let mut pwrcfg = pwr.vos0(&dp.SYSCFG).freeze();
     let backup = pwrcfg.backup().unwrap();
 
+    // Enable clock source
+    dp.RCC.ahb4enr.modify(|_, w| w.gpiohen().set_bit());
+    dp.GPIOH.otyper.write(|w| w.ot1().push_pull());
+    dp.GPIOH.moder.modify(|_, w| w.moder1().output());
+    dp.GPIOH.bsrr.write(|w| w.bs1().set_bit());
+
     // Constrain and Freeze clocks
     let ccdr = {
         let mut ccdr = dp
             .RCC
             .constrain()
-            // .use_hse()
+            .use_hse(HSE_CLK)
             .bypass_hse()
             .sys_ck(480.MHz())
             .hclk(240.MHz())
@@ -93,7 +104,7 @@ unsafe fn main() -> ! {
         let _ = ccdr.clocks.hsi48_ck().expect("HSI48 must run");
         ccdr.peripheral.kernel_usb_clk_mux(rcc::rec::UsbClkSel::Hsi48);
         ccdr.peripheral.kernel_adc_clk_mux(rcc::rec::AdcClkSel::Per);
-        // ccdr.peripheral.kernel_usart234578_clk_mux(rcc::rec::Usart234578ClkSel::HsiKer);
+        ccdr.peripheral.kernel_usart234578_clk_mux(rcc::rec::Usart234578ClkSel::HsiKer);
         ccdr
     };
 
@@ -110,7 +121,7 @@ unsafe fn main() -> ! {
             dp.GPIOE.split(ccdr.peripheral.GPIOE),
             dp.GPIOF.split(ccdr.peripheral.GPIOF),
             dp.GPIOG.split(ccdr.peripheral.GPIOG),
-            dp.GPIOH.split(ccdr.peripheral.GPIOH),
+            dp.GPIOH.split_without_reset(ccdr.peripheral.GPIOH),
             dp.GPIOI.split(ccdr.peripheral.GPIOI),
             dp.GPIOJ.split(ccdr.peripheral.GPIOJ),
             dp.GPIOK.split(ccdr.peripheral.GPIOK),
@@ -152,6 +163,7 @@ unsafe fn main() -> ! {
 
         // UART interrupt
         uart.listen(hal::serial::Event::Rxne);
+        cp.NVIC.set_priority(pac::Interrupt::USART1, 15);
         cortex_m::peripheral::NVIC::unmask(pac::Interrupt::USART1);
 
         let (terminal_tx, terminal_rx) = uart.split();
@@ -327,6 +339,12 @@ unsafe fn main() -> ! {
         let display_config = DisplayConfiguration {
             active_width: display::SCREEN_WIDTH as u16,
             active_height: display::SCREEN_HEIGHT as u16,
+            // h_back_porch: display::H_BACK_PORCH - 33,
+            // h_front_porch: display::H_FRONT_PORCH - 24,
+            // v_back_porch: display::V_BACK_PORCH - 29,
+            // v_front_porch: display::V_FRONT_PORCH - 3,
+            // h_sync: display::H_SYNC_LEN,
+            // v_sync: display::V_SYNC_LEN,
             h_back_porch: display::H_BACK_PORCH,
             h_front_porch: display::H_FRONT_PORCH,
             v_back_porch: display::V_BACK_PORCH,
@@ -339,7 +357,7 @@ unsafe fn main() -> ! {
             // vertical synchronization: `false`: active low, `true`: active high
             v_sync_pol: display::V_SYNC_POL,
             // data enable: `false`: active low, `true`: active high
-            not_data_enable_pol: true,
+            not_data_enable_pol: false,
             // pixel_clock: `false`: active low, `true`: active high
             pixel_clock_pol: false,
         };
@@ -349,23 +367,77 @@ unsafe fn main() -> ! {
         let fb0: &'static mut _ = &mut *(framebuffer_start_addr as *mut _);
         let fb1: &'static mut _ = &mut *((framebuffer_start_addr + display::FRAME_BUFFER_SIZE) as *mut _);
         let display = h7_display::H7Display::new(fb0, fb1);
-        let gpu = display::Gpu::new(display, ltdc.split());
+        let mut gpu = display::Gpu::new(display, ltdc.split());
+        gpu.display().clear(embedded_graphics::pixelcolor::Rgb565::RED).unwrap();
+        gpu.display().swap_buffers();
+        gpu.display().clear(embedded_graphics::pixelcolor::Rgb565::WHITE).unwrap();
+
+        gpu.display()
+            .fill_solid(
+                &embedded_graphics::primitives::Rectangle::new(embedded_graphics::prelude::Point::new(0, 0), embedded_graphics::prelude::Size::new(1024, 128)),
+                embedded_graphics::pixelcolor::Rgb565::RED,
+            )
+            .unwrap();
+
+        gpu.display()
+            .fill_solid(
+                &embedded_graphics::primitives::Rectangle::new(
+                    embedded_graphics::prelude::Point::new(0, 128),
+                    embedded_graphics::prelude::Size::new(1024, 128),
+                ),
+                embedded_graphics::pixelcolor::Rgb565::BLUE,
+            )
+            .unwrap();
+
+        gpu.display().swap_buffers();
 
         interrupt_free(|cs| {
             display::GPU.borrow(cs).replace(Some(gpu));
         });
 
-        // Set up frame sawp timer
-        let mut timer2 = dp.TIM2.timer(display::FRAME_RATE.Hz(), ccdr.peripheral.TIM2, &ccdr.clocks);
-        timer2.listen(hal::timer::Event::TimeOut);
-        cortex_m::peripheral::NVIC::unmask(pac::Interrupt::TIM2);
-
         // TODO: DMA2D, DMA framebuffer copy
         // let mut dma_stream = StreamsTuple::new(dp.MDMA, ccdr.peripheral.MDMA);
         // dma_stream.
 
-        // DSI?
-        // let _dsihost = dsi::Dsi::new(dsi::DsiLanes::Two, &display_config, dp.DSIHOST, ccdr.peripheral.DSI, &ccdr.clocks);
+        let dsi_config = DsiConfig {
+            mode: DsiMode::Video {
+                mode: hal::dsi::DsiVideoMode::Burst,
+            },
+            lane_count: LaneCount::DoubleLane,
+            channel: DsiChannel::Ch0,
+            hse_freq: HSE_CLK,
+            ltdc_freq: display::PIXEL_CLOCK,
+            interrupts: DsiInterrupts::None,
+            color_coding_host: ColorCoding::SixteenBitsConfig1,
+            color_coding_wrapper: ColorCoding::SixteenBitsConfig1,
+            lp_size: 16,
+            vlp_size: 0,
+        };
+
+        let dsi_pll_config = unsafe { DsiPllConfig::manual(40, 2, 1, 4) };
+
+        let mut dsi_host = DsiHost::init(dsi_pll_config, display_config, dsi_config, dp.DSIHOST, ccdr.peripheral.DSI, &ccdr.clocks).unwrap();
+        dsi_host.set_command_mode_transmission_kind(DsiCmdModeTransmissionKind::AllInLowPower);
+
+        // Enable DSI host
+        dsi_host.start();
+        dsi_host.enable_bus_turn_around(); // Must be before read attempts
+
+        dsi_host.configure_phy_timers(DsiPhyTimers {
+            dataline_hs2lp: 35,
+            dataline_lp2hs: 35,
+            clock_hs2lp: 35,
+            clock_lp2hs: 35,
+            dataline_max_read_time: 0,
+            stop_wait_time: 10,
+        });
+
+        dsi_host.force_rx_low_power(true);
+
+        // Set up frame sawp timer
+        let mut timer2 = dp.TIM2.timer(display::FRAME_RATE.Hz() / 3, ccdr.peripheral.TIM2, &ccdr.clocks);
+        timer2.listen(hal::timer::Event::TimeOut);
+        // cortex_m::peripheral::NVIC::unmask(pac::Interrupt::TIM2);
     }
 
     let mut menu = terminal::menu::Menu::new(terminal::TerminalWriter, terminal::MENU);
