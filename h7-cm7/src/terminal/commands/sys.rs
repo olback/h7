@@ -1,4 +1,4 @@
-use crate::time::TimeSource;
+use crate::{display::GPU, time::TimeSource};
 
 use {
     super::{utils::*, HEADER_WIDTH, LABEL_WIDTH},
@@ -57,10 +57,7 @@ pub const HELP: MenuItem<'static, TerminalWriter> = MenuItem::Command {
     },
 };
 
-pub const MAN: MenuItem<'static, TerminalWriter> = MenuItem::Alias {
-    alias: "man",
-    command: "help",
-};
+pub const MAN: MenuItem<'static, TerminalWriter> = MenuItem::Alias { alias: "man", command: "help" };
 
 pub const PROGRAMS: MenuItem<'static, TerminalWriter> = MenuItem::Command {
     name: "programs",
@@ -71,9 +68,7 @@ pub const PROGRAMS: MenuItem<'static, TerminalWriter> = MenuItem::Command {
 
         iter_menu(m, args, MENU, &mut |menu, _, item, _, level| {
             match item {
-                MenuItem::Command {
-                    name, description, ..
-                } => {
+                MenuItem::Command { name, description, .. } => {
                     writeln!(
                         menu.writer(),
                         "{padding}{name:LABEL_WIDTH$} {description}",
@@ -166,33 +161,14 @@ pub const INFO: MenuItem<'static, TerminalWriter> = MenuItem::Command {
         ["cpu"] => {
             writeln!(m.writer(), "{:LABEL_WIDTH$} Cortex-M7F", "Core")?;
             match interrupt_free(crate::system::cpu_freq) {
-                Some(freq) => writeln!(
-                    m.writer(),
-                    "{:LABEL_WIDTH$} {}MHz",
-                    "Core frequency",
-                    freq.to_MHz()
-                )?,
+                Some(freq) => writeln!(m.writer(), "{:LABEL_WIDTH$} {}MHz", "Core frequency", freq.to_MHz())?,
                 None => writeln!(m.writer(), "{:LABEL_WIDTH$} unavailable", "Core frequency")?,
             }
             match interrupt_free(crate::system::cpu_temp) {
-                Some(temp) => writeln!(
-                    m.writer(),
-                    "{:LABEL_WIDTH$} {:.01}°C",
-                    "Core temperature",
-                    temp
-                )?,
-                None => writeln!(
-                    m.writer(),
-                    "{:LABEL_WIDTH$} unavailable",
-                    "Core temperature"
-                )?,
+                Some(temp) => writeln!(m.writer(), "{:LABEL_WIDTH$} {:.01}°C", "Core temperature", temp)?,
+                None => writeln!(m.writer(), "{:LABEL_WIDTH$} unavailable", "Core temperature")?,
             }
-            writeln!(
-                m.writer(),
-                "{:LABEL_WIDTH$} {}",
-                "Cycle count",
-                cortex_m::peripheral::DWT::cycle_count()
-            )?;
+            writeln!(m.writer(), "{:LABEL_WIDTH$} {}", "Cycle count", cortex_m::peripheral::DWT::cycle_count())?;
             writeln!(
                 m.writer(),
                 "{:LABEL_WIDTH$} {}",
@@ -208,12 +184,7 @@ pub const INFO: MenuItem<'static, TerminalWriter> = MenuItem::Command {
             Ok(())
         }
         ["ram"] => {
-            writeln!(
-                m.writer(),
-                "{:LABEL_WIDTH$} {}KiB",
-                "Internal RAM",
-                crate::system::ram_size() / 1024
-            )?;
+            writeln!(m.writer(), "{:LABEL_WIDTH$} {}KiB", "Internal RAM", crate::system::ram_size() / 1024)?;
             writeln!(
                 m.writer(),
                 "{:LABEL_WIDTH$} {}MiB",
@@ -244,46 +215,15 @@ pub const INFO: MenuItem<'static, TerminalWriter> = MenuItem::Command {
                 "Memory usage",
                 used = crate::mem::ALLOCATOR.used(),
                 total = crate::mem::HEAP_SIZE,
-                fraction =
-                    (crate::mem::ALLOCATOR.used() as f64 / crate::mem::HEAP_SIZE as f64) * 100.0
+                fraction = (crate::mem::ALLOCATOR.used() as f64 / crate::mem::HEAP_SIZE as f64) * 100.0
             )?;
-            writeln!(
-                m.writer(),
-                "{:LABEL_WIDTH$} {} bytes",
-                "GPU reserved",
-                crate::display::FRAME_BUFFER_ALLOC_SIZE
-            )?;
-            writeln!(
-                m.writer(),
-                "{:LABEL_WIDTH$} {}",
-                "Rust version",
-                consts::RUSTC_VERSION
-            )?;
-            writeln!(
-                m.writer(),
-                "{:LABEL_WIDTH$} {}",
-                "Version",
-                consts::GIT_DESCRIBE
-            )?;
-            writeln!(
-                m.writer(),
-                "{:LABEL_WIDTH$} {}",
-                "Debug",
-                cfg!(debug_assertions)
-            )?;
-            let dt = NaiveDate::from_ymd_opt(
-                consts::COMPILE_TIME_YEAR,
-                consts::COMPILE_TIME_MONTH,
-                consts::COMPILE_TIME_DAY,
-            )
-            .and_then(|dt| {
-                dt.and_hms_opt(
-                    consts::COMPILE_TIME_HOUR,
-                    consts::COMPILE_TIME_MINUTE,
-                    consts::COMPILE_TIME_SECOND,
-                )
-            })
-            .unwrap();
+            writeln!(m.writer(), "{:LABEL_WIDTH$} {} bytes", "GPU reserved", crate::display::FRAME_BUFFER_ALLOC_SIZE)?;
+            writeln!(m.writer(), "{:LABEL_WIDTH$} {}", "Rust version", consts::RUSTC_VERSION)?;
+            writeln!(m.writer(), "{:LABEL_WIDTH$} {}", "Version", consts::GIT_DESCRIBE)?;
+            writeln!(m.writer(), "{:LABEL_WIDTH$} {}", "Debug", cfg!(debug_assertions))?;
+            let dt = NaiveDate::from_ymd_opt(consts::COMPILE_TIME_YEAR, consts::COMPILE_TIME_MONTH, consts::COMPILE_TIME_DAY)
+                .and_then(|dt| dt.and_hms_opt(consts::COMPILE_TIME_HOUR, consts::COMPILE_TIME_MINUTE, consts::COMPILE_TIME_SECOND))
+                .unwrap();
             writeln!(
                 m.writer(),
                 "{:LABEL_WIDTH$} {weekday} {month} {day} {hh:02}:{mm:02}:{ss:02} {year}",
@@ -379,10 +319,7 @@ pub const UPTIME: MenuItem<'static, TerminalWriter> = MenuItem::Command {
     description: "Query the system uptime",
     action: |m, args| {
         check_args_len(0, args.len())?;
-        match (
-            TimeSource::get_date_time(),
-            interrupt_free(|cs| *crate::time::BOOT_TIME.borrow(cs).borrow()),
-        ) {
+        match (TimeSource::get_date_time(), interrupt_free(|cs| *crate::time::BOOT_TIME.borrow(cs).borrow())) {
             (Some(now), Some(boot_time)) => {
                 let dur = now - boot_time;
                 write!(m.writer(), "Uptime: ")?;
@@ -396,10 +333,7 @@ pub const UPTIME: MenuItem<'static, TerminalWriter> = MenuItem::Command {
                 writeln!(m.writer(), "Uptime: unavailable <current time unavailable>")?;
             }
             _ => {
-                writeln!(
-                    m.writer(),
-                    "Uptime: unavailable <boot time and current time unavailable>"
-                )?;
+                writeln!(m.writer(), "Uptime: unavailable <boot time and current time unavailable>")?;
             }
         }
         Ok(())
@@ -437,6 +371,25 @@ pub const CORECTL: MenuItem<'static, TerminalWriter> = MenuItem::Command {
             ["start"] => writeln!(m.writer(), "todo")?,
             ["stop"] => writeln!(m.writer(), "todo")?,
             ["status"] => writeln!(m.writer(), "todo")?,
+            _ => writeln!(m.writer(), "Unknown command")?,
+        }
+
+        Ok(())
+    },
+};
+
+pub const DISPCTL: MenuItem<'static, TerminalWriter> = MenuItem::Command {
+    name: "dispctl",
+    help: "dispctl - Control the display",
+    description: "Control the display",
+    action: |m, args| {
+        check_args_len(1, args.len())?;
+        match args {
+            ["swap"] => {
+                interrupt_free(|cs| {
+                    GPU.borrow(cs).borrow_mut().as_mut().unwrap().swap();
+                });
+            }
             _ => writeln!(m.writer(), "Unknown command")?,
         }
 

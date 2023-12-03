@@ -10,8 +10,6 @@ type Pixel = embedded_graphics::pixelcolor::Rgb565;
 pub const SCREEN_WIDTH: usize = 1024;
 pub const SCREEN_HEIGHT: usize = 768;
 pub const PIXEL_CLOCK: fugit::HertzU32 = fugit::Rate::<u32, _, _>::kHz(57800u32);
-// pub const PIXEL_CLOCK: fugit::HertzU32 = fugit::Rate::<u32, _, _>::kHz(51270u32);
-// pub const PIXEL_CLOCK: fugit::HertzU32 = fugit::Rate::<u32, _, _>::MHz(65u32);
 pub const H_BACK_PORCH: u16 = 80;
 pub const H_FRONT_PORCH: u16 = 24;
 pub const H_SYNC_LEN: u16 = 68;
@@ -20,6 +18,24 @@ pub const V_BACK_PORCH: u16 = 29;
 pub const V_FRONT_PORCH: u16 = 3;
 pub const V_SYNC_LEN: u16 = 6;
 pub const V_SYNC_POL: bool = false;
+
+// pub const PIXEL_CLOCK: fugit::HertzU32 = fugit::Rate::<u32, _, _>::kHz(51270u32);
+// pub const PIXEL_CLOCK: fugit::HertzU32 = fugit::Rate::<u32, _, _>::MHz(65u32);
+// pub const PIXEL_CLOCK: fugit::HertzU32 = fugit::Rate::<u32, _, _>::kHz(66656u32);
+// pub const H_BACK_PORCH: u16 = 160;
+// pub const H_FRONT_PORCH: u16 = 24;
+// pub const H_SYNC_LEN: u16 = 136;
+// pub const H_SYNC_POL: bool = false;
+// pub const V_BACK_PORCH: u16 = 29;
+// pub const V_FRONT_PORCH: u16 = 3;
+// pub const V_SYNC_LEN: u16 = 6;
+// pub const V_SYNC_POL: bool = false;
+
+// [EDID_MODE_1024x768_60Hz] = {
+//     .name = "1024x768@60Hz", .pixel_clock = 57800, .refresh = 60,
+//     .hactive = 1024, .hback_porch = 80, .hfront_porch = 24, .hsync_len = 68, .hpol = 0,
+//     .vactive = 768, .vback_porch = 29, .vfront_porch = 3, .vsync_len = 6, .vpol = 0,
+// },
 
 pub const FRAME_BUFFER_SIZE: usize = mem::size_of::<FrameBuffer<Pixel, SCREEN_WIDTH, SCREEN_HEIGHT>>();
 pub const FRAME_BUFFER_ALLOC_SIZE: usize = FRAME_BUFFER_SIZE * 2;
@@ -34,6 +50,7 @@ pub struct Gpu {
 
 impl Gpu {
     pub fn new(display: H7Display<'static, Pixel, SCREEN_HEIGHT, SCREEN_HEIGHT>, mut layer: LtdcLayer1) -> Self {
+        unsafe { layer.enable(display.back_buffer().as_ptr() as *const u16, PixelFormat::RGB565) };
         unsafe { layer.enable(display.front_buffer().as_ptr() as *const u16, PixelFormat::RGB565) };
         Self { display, layer }
     }

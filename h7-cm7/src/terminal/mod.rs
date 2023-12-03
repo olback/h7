@@ -64,6 +64,7 @@ pub const MENU: &[MenuItem<TerminalWriter>] = &[
             commands::sys::UPTIME,
             commands::sys::LEDCTL,
             commands::sys::CORECTL,
+            commands::sys::DISPCTL,
         ],
     },
     MenuItem::Group {
